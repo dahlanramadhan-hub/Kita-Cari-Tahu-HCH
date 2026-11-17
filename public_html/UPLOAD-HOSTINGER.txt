@@ -1,0 +1,17 @@
+PANDUAN SINGKAT HOSTINGER
+
+1. Buat database MySQL di hPanel.
+2. Upload semua isi ZIP ini ke folder public_html.
+3. Ubah .env.example menjadi .env.
+4. Isi DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD, APP_URL.
+5. Import database/schema.sql melalui phpMyAdmin.
+6. Pastikan storage/uploads dan storage/logs bisa ditulis oleh PHP.
+7. Pilih PHP 8.1 atau lebih baru dan aktifkan pdo_mysql.
+8. Buka domain.
+
+AKUN AWAL (SEGERA GANTI PASSWORD):
+Super Admin: superadmin / Super123!
+Admin: admin / Admin123!
+Editor: editor / Editor123!
+
+Jangan upload file .env ke tempat publik atau membagikan kredensial database.

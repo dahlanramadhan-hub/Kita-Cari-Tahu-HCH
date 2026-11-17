@@ -1,0 +1,29 @@
+KONFIGURASI DATABASE HOSTINGER — HUMAS CONTENT HUB
+
+Informasi yang diberikan:
+- Website: humascontenthub.online
+- User MySQL: u405234451_a192519251925_
+- Nama database: perlu disalin persis dari hPanel (informasi yang dikirim belum terbaca utuh).
+- Password MySQL: belum diberikan; isi sendiri dari hPanel.
+- DB_HOST: localhost adalah nilai awal umum pada shared hosting; pastikan nilai Host MySQL di hPanel.
+
+CARA IMPORT:
+1. Masuk hPanel Hostinger > Website > Kelola > Database MySQL > phpMyAdmin.
+2. Pilih database yang benar di panel kiri. Pastikan nama database sama persis dengan yang tampil di hPanel.
+3. Buka tab Import.
+4. Pilih file database/import-humas-content-hub.sql.
+5. Klik Import/Go dan tunggu pesan berhasil.
+6. Jangan membuat database baru dari file SQL ini; file hanya membuat tabel users, contents, dan attachments pada database yang dipilih.
+
+CARA HUBUNGKAN APLIKASI:
+1. Salin .env.example menjadi .env.
+2. Isi DB_DATABASE dengan nama database lengkap dari hPanel.
+3. Isi DB_USERNAME dengan username MySQL lengkap dari hPanel (nilai yang diberikan saat ini sudah dimasukkan sebagai contoh).
+4. Isi DB_PASSWORD dengan password user MySQL. Password tidak dapat ditebak dan tidak disimpan dalam paket.
+5. Pastikan DB_HOST sesuai nilai Host MySQL di hPanel (umumnya localhost pada konfigurasi shared hosting).
+6. Simpan .env di lokasi yang tidak dapat diakses publik. Jangan membagikan file .env.
+
+CATATAN:
+- Jangan kirim password database melalui chat atau unggah ke ZIP.
+- Jika username/nama database yang tampil di hPanel berbeda satu karakter saja, gunakan nilai persis dari hPanel.
+- Import SQL ini membuat struktur tabel kosong; tidak memasukkan data konten lama dari browser.

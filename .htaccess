@@ -1,0 +1,18 @@
+Options -Indexes
+RewriteEngine On
+
+# Never expose application internals, configuration, SQL dumps or storage.
+RewriteRule ^(app|config|database|routes|storage)(/|$) - [F,L,NC]
+RewriteRule ^\.env - [F,L]
+RewriteRule ^(README\.md|composer\.json|\.gitignore)$ - [F,L,NC]
+
+# Public static assets and API are served from the public directory.
+RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+RewriteRule ^api/?$ public/api/index.php [QSA,L]
+RewriteRule ^api/(.*)$ public/api/index.php?route=$1 [QSA,L]
+
+# Root application entry point.
+RewriteRule ^$ public/index.php [L]
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+RewriteRule ^(.+)$ public/$1 [L]

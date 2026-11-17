@@ -1,0 +1,12 @@
+
+Options -Indexes
+
+<FilesMatch "\.(php|phar)$">
+  Require all granted
+</FilesMatch>
+
+RewriteEngine On
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^api/([^/]+)/?$ api/index.php?route=$1 [QSA,L]

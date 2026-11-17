@@ -1,0 +1,11 @@
+PAKET UNTUK FOLDER public_html HOSTINGER
+
+1. Buka File Manager > public_html.
+2. Upload file public_html-upload.zip ke dalam folder public_html.
+3. Pilih ZIP tersebut lalu Extract di dalam folder public_html. Jangan membuat folder public_html baru di dalamnya.
+4. Setelah extract, pastikan index.php, .htaccess, api, assets, app, config, database, routes, dan storage terlihat langsung di dalam public_html.
+5. Jangan hapus file .env yang sekarang berada satu tingkat di atas public_html. Paket ini disetel untuk membaca .env tersebut terlebih dahulu.
+6. Jika .env belum berisi DB_DATABASE, DB_USERNAME, dan DB_PASSWORD yang benar, koneksi database belum dapat berjalan. Jangan menebak nilainya.
+7. Setelah extract, tes https://humascontenthub.online/ .
+
+Catatan: semua file aplikasi berada di public_html agar sesuai dengan folder upload Hostinger. Akses langsung ke app/config/database/routes/storage diblokir oleh .htaccess.
