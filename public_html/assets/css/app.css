@@ -2659,3 +2659,7 @@ button.filter .hch-action-icon{
     max-height:calc(100dvh - 18px)!important;
   }
 }
+
+/* Thread draft & revisi: bedakan balasan Admin dan Editor */
+.comment.comment-admin{border-left:3px solid #0872b9}
+.comment.comment-editor{border-left:3px solid #94a3b8;background:#f8fafc}

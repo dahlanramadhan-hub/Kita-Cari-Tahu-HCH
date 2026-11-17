@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 final class UploadService {
-    public static function persistInlineFiles(mixed $value): mixed {
+    public static function persistInlineFiles($value) {
         if (!is_array($value)) return $value;
         foreach ($value as $key => $item) {
             if ($key === 'dataUrl' && is_string($item) && preg_match('#^data:([^;]+);base64,(.+)$#s', $item, $m)) {
@@ -39,7 +39,7 @@ final class UploadService {
         return $value;
     }
 
-    public static function stream(int $id): never {
+    public static function stream(int $id) {
         AuthService::requireUser();
         $stmt = db()->prepare('SELECT * FROM attachments WHERE id=? LIMIT 1');
         $stmt->execute([$id]);

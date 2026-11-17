@@ -5,13 +5,15 @@ final class AuthService {
     public static function bootSession(): void {
         if (session_status() !== PHP_SESSION_ACTIVE) {
             session_name('hch_session');
-            session_set_cookie_params([
-                'lifetime' => 0,
-                'path' => '/',
-                'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
-                'httponly' => true,
-                'samesite' => 'Lax',
-            ]);
+            $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+            if (PHP_VERSION_ID >= 70300) {
+                session_set_cookie_params([
+                    'lifetime' => 0, 'path' => '/', 'secure' => $secure,
+                    'httponly' => true, 'samesite' => 'Lax',
+                ]);
+            } else {
+                session_set_cookie_params(0, '/; samesite=Lax', '', $secure, true);
+            }
             session_start();
         }
         if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(32));
@@ -34,10 +36,10 @@ final class AuthService {
         return $user;
     }
 
-    public static function requireAdmin(): array {
+        public static function requireSuperAdmin(): array {
         $user = self::requireUser();
-        if (!in_array($user['role'], ['Super Admin', 'Admin'], true)) {
-            Response::json(['message' => 'Akses ditolak. Fitur ini hanya untuk Admin.'], 403);
+        if ($user['role'] !== 'Super Admin') {
+            Response::json(['message' => 'Akses ditolak. Fitur ini hanya untuk Super Admin.'], 403);
         }
         return $user;
     }

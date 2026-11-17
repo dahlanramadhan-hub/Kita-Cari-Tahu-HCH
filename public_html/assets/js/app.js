@@ -32,7 +32,7 @@ function normalizeResponsible(){
 }
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
-function badge(s){let c=s==="Approved"||s==="Publish"?"b-green":s==="Revisi"?"b-yellow":s==="Publish Terjadwal"?"b-purple":"b-gray";return `<span class="badge ${c}">${esc(s)}</span>`}
+function badge(s){let c=s==="Approved"||s==="Publish"?"b-green":s==="Revisi"?"b-yellow":s==="Menunggu Review"?"b-blue":s==="Publish Terjadwal"?"b-purple":"b-gray";return `<span class="badge ${c}">${esc(s)}</span>`}
 function canEdit(){return true;}
 function isFinalLocked(c){return !!(c&&c.captionApproved&&(c.drafts||[]).some(d=>d.finalApproved));}
 function ensureEditable(c){if(isFinalLocked(c)){alert("Proyek ini sudah FINAL karena Draft/Revisi dan Caption telah sama-sama di-ACC. Seluruh perubahan dan pengiriman baru dikunci.");return false;}return true;}
@@ -127,12 +127,14 @@ function mergeUploadedFileRefs(localValue,savedValue){
   }
 }
 function scheduleContentSave(){
-  if(!currentAccount)return;
+  if(!currentAccount||suppressContentSave)return;
+  contentSaveQueued=true;
   clearTimeout(contentSaveTimer);
   contentSaveTimer=setTimeout(saveContentsToServer,700);
 }
 async function saveContentsToServer(){
   if(!currentAccount)return;
+  contentSaveQueued=false;
   if(contentSaveInFlight){contentSavePending=true;return;}
   contentSaveInFlight=true;
   try{
@@ -152,6 +154,37 @@ async function saveContentsToServer(){
     if(contentSavePending){contentSavePending=false;saveContentsToServer();}
   }
 }
+
+function draftTurnBanner(c){
+  if(isFinalLocked(c))return '<div class="workflow-note">✅ FINAL — Draft dan Caption sudah di-ACC.</div>';
+  const last=(c.drafts||[])[(c.drafts||[]).length-1];
+  let msg;
+  if(!last)msg="⏳ Giliran <b>Editor</b>: unggah draft pertama.";
+  else if(last.finalApproved)msg="✅ Draft terakhir sudah di-ACC.";
+  else if(c.status==="Revisi")msg="✏️ Giliran <b>Editor</b>: baca catatan revisi, lalu balas atau unggah draft baru.";
+  else msg="🔎 Giliran <b>Admin</b>: tinjau draft terakhir, beri catatan revisi atau ACC.";
+  return `<div class="workflow-note" style="margin-bottom:12px">${msg}</div>`;
+}
+let suppressContentSave=false,contentSaveQueued=false,openDetailId=null;
+async function pollContents(){
+  if(!currentAccount||contentSaveInFlight||contentSaveQueued||document.hidden)return;
+  try{
+    const data=await apiRequest("bootstrap");
+    if(!data.authenticated||!Array.isArray(data.contents))return;
+    if(contentSaveInFlight||contentSaveQueued)return;
+    const strip=v=>JSON.stringify(v,(k,x)=>k==="dataUrl"?undefined:x);
+    if(strip(data.contents)===strip(contents))return;
+    const typing=[...document.querySelectorAll("#overlay textarea,#overlay input[type=text],#overlay input[type=url]")].some(el=>el.value&&el.value.trim());
+    contents=data.contents;normalizeData();normalizeResponsible();
+    suppressContentSave=true;
+    try{renderStats();renderCards();}finally{suppressContentSave=false;}
+    if(openDetailId&&document.getElementById("overlay")&&!typing&&contents.some(x=>x.id===openDetailId)){
+      suppressContentSave=true;try{openDetail(openDetailId);}finally{suppressContentSave=false;}
+    }
+  }catch(e){/* abaikan, coba lagi di siklus berikutnya */}
+}
+setInterval(pollContents,15000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)pollContents();});
 async function persistAccounts(){
   try{
     const data=await apiRequest("accounts",{method:"POST",body:JSON.stringify({accounts})});
@@ -179,10 +212,9 @@ async function initializeApp(){
 function isSuper(){return currentAccount?.role==="Super Admin"}
 function isAdmin(){return currentAccount?.role==="Admin"}
 function isEditor(){return currentAccount?.role==="Editor"}
-function canManageAccounts(){return isSuper()||isAdmin()}
+function canManageAccounts(){return isSuper()}
 function canSubmitContent(){return isSuper()||isAdmin()}
 function canApprove(){return isSuper()||isAdmin()}
-function canEdit(){return canSubmitContent()}
 function login(){
 document.getElementById("app").innerHTML=`<div class="login"><div class="login-card">
 <div class="login-brand"><img src="${LOGO_DATA}" alt="Disnakertrans Provinsi Jawa Barat"></div>
@@ -210,10 +242,17 @@ function openAccountManagement(){
  if(!canManageAccounts()){openMyAccount();return;}
  const visibleAccounts=accounts.filter(a=>isSuper()||a.role!=="Super Admin");
  const rows=visibleAccounts.map(a=>`<tr><td><b>${esc(a.name)}</b><br><small>${esc(a.username)}</small></td><td>${esc(a.role)}</td>${isSuper()?`<td><span id="account-password-${a.id}">••••••••</span> <button class="btn secondary" style="padding:6px 9px;font-size:11px" onclick="toggleAccountPassword(${a.id},this)">Lihat</button></td>`:""}<td><button class="btn secondary" onclick="editAccount(${a.id})">Edit</button> ${a.id===currentAccount.id?'<span class="file-size">Akun aktif</span>':`<button class="btn danger" onclick="deleteAccount(${a.id})">Hapus</button>`}</td></tr>`).join("");
- show(`<div class="modal account-modal"><div class="modal-head"><div><div class="eyebrow">PENGATURAN</div><h2 style="margin:5px 0">Kelola Akun</h2><div class="meta">Atur akun Admin dan Editor.</div></div><button class="close" onclick="closeModal()">×</button></div><div class="modal-body"><div class="actions" style="margin:0 0 15px"><button class="btn primary" onclick="addAccount()">＋ Tambah Akun</button></div><div style="overflow:auto"><table class="account-table"><thead><tr><th>Nama / Username</th><th>Role</th>${isSuper()?"<th>Password</th>":""}<th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div><p class="item-note">Akun Super Admin hanya satu, tidak dapat dihapus, dan hanya nama, username, serta password yang dapat diubah.</p>${isSuper()?'<p class="item-note" style="color:#a16207">Mode prototype: Super Admin dapat melihat password akun karena disimpan lokal sebagai teks biasa. Jangan gunakan cara ini pada aplikasi produksi.</p>':""}</div></div>`);
+ show(`<div class="modal account-modal"><div class="modal-head"><div><div class="eyebrow">PENGATURAN</div><h2 style="margin:5px 0">Kelola Akun</h2><div class="meta">Atur akun Admin dan Editor.</div></div><button class="close" onclick="closeModal()">×</button></div><div class="modal-body"><div class="actions" style="margin:0 0 15px"><button class="btn primary" onclick="addAccount()">＋ Tambah Akun</button></div><div style="overflow:auto"><table class="account-table"><thead><tr><th>Nama / Username</th><th>Role</th>${isSuper()?"<th>Password</th>":""}<th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div><p class="item-note">Akun Super Admin hanya satu, tidak dapat dihapus, dan hanya nama, username, serta password yang dapat diubah.</p>${isSuper()?'<p class="item-note" style="color:#a16207">Password disimpan terenkripsi dan hanya dapat dilihat Super Admin. Password lama baru tampil setelah akun tersebut login atau passwordnya diganti.</p>':""}</div></div>`);
 }
-function toggleAccountPassword(id,button){
- alert("Password disimpan dalam bentuk hash dan tidak dapat ditampilkan. Gunakan fitur Edit Akun untuk mengganti password.");
+async function toggleAccountPassword(id,button){
+ const cell=document.getElementById("account-password-"+id);
+ if(!cell)return;
+ if(button.dataset.shown==="1"){cell.textContent="••••••••";button.textContent="Lihat";button.dataset.shown="";return}
+ try{
+  const data=await apiRequest("password?id="+id);
+  if(!data.password){alert(data.message||"Password belum tersedia.");return}
+  cell.textContent=data.password;button.textContent="Sembunyikan";button.dataset.shown="1";
+ }catch(error){alert(error.message)}
 }
 
 function openMyAccount(){
@@ -257,10 +296,10 @@ function deleteAccount(id){
  accounts=accounts.filter(x=>x.id!==id);persistAccounts();openAccountManagement();
 }
 function render(){normalizeData();normalizeResponsible();
-document.getElementById("app").innerHTML=`<header class="topbar"><div class="brand"><img class="brand-logo" src="${LOGO_DATA}" alt="Disnakertrans Provinsi Jawa Barat"><div class="brand-copy"><strong>Humas Content Hub</strong><small>DISNAKERTRANS PROVINSI JAWA BARAT</small></div></div><div class="userbox"><div class="account-profile"><span class="account-avatar"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMTYwIj4KPGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzAwNjhhZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzAwODEwYiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgcng9IjgwIiBmaWxsPSJ1cmwoI2cpIi8+CjxjaXJjbGUgY3g9IjgwIiBjeT0iNjIiIHI9IjMxIiBmaWxsPSIjZDlhMjdlIi8+CjxwYXRoIGQ9Ik00OCA1OGMzLTMwIDIwLTQ0IDM0LTQ0IDIyIDAgMzUgMTcgMzQgNDItMTAtOC0xOS0xMi0zMS0xMi0xMyAwLTI1IDYtMzcgMTR6IiBmaWxsPSIjMjYzMjM4Ii8+CjxwYXRoIGQ9Ik00OCAxMzdjNS0yOSAxOC00MyAzMi00M3MyNyAxNCAzMiA0MyIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNjIgNzVjNSA0IDEwIDYgMTggNnMxMy0yIDE4LTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzZiM2YzMiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPGNpcmNsZSBjeD0iNjgiIGN5PSI2MiIgcj0iMyIgZmlsbD0iIzI2MzIzOCIvPjxjaXJjbGUgY3g9IjkyIiBjeT0iNjIiIHI9IjMiIGZpbGw9IiMyNjMyMzgiLz4KPC9zdmc+" alt="Foto profil Dahlan Ramadhan"></span><div class="account-info"><div class="account-name">${esc(currentAccount?.name||"Pengguna")}</div><div class="account-role">${esc(currentAccount?.role||"")}</div></div></div><div class="account-tools"><button class="btn ghost" onclick="openAccountManagement()">Kelola Akun</button><button class="btn ghost" onclick="logout()">Keluar</button></div></div></header>
+document.getElementById("app").innerHTML=`<header class="topbar"><div class="brand"><img class="brand-logo" src="${LOGO_DATA}" alt="Disnakertrans Provinsi Jawa Barat"><div class="brand-copy"><strong>Humas Content Hub</strong><small>DISNAKERTRANS PROVINSI JAWA BARAT</small></div></div><div class="userbox"><div class="account-profile"><span class="account-avatar"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMTYwIj4KPGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzAwNjhhZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzAwODEwYiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgcng9IjgwIiBmaWxsPSJ1cmwoI2cpIi8+CjxjaXJjbGUgY3g9IjgwIiBjeT0iNjIiIHI9IjMxIiBmaWxsPSIjZDlhMjdlIi8+CjxwYXRoIGQ9Ik00OCA1OGMzLTMwIDIwLTQ0IDM0LTQ0IDIyIDAgMzUgMTcgMzQgNDItMTAtOC0xOS0xMi0zMS0xMi0xMyAwLTI1IDYtMzcgMTR6IiBmaWxsPSIjMjYzMjM4Ii8+CjxwYXRoIGQ9Ik00OCAxMzdjNS0yOSAxOC00MyAzMi00M3MyNyAxNCAzMiA0MyIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNjIgNzVjNSA0IDEwIDYgMTggNnMxMy0yIDE4LTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzZiM2YzMiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPGNpcmNsZSBjeD0iNjgiIGN5PSI2MiIgcj0iMyIgZmlsbD0iIzI2MzIzOCIvPjxjaXJjbGUgY3g9IjkyIiBjeT0iNjIiIHI9IjMiIGZpbGw9IiMyNjMyMzgiLz4KPC9zdmc+" alt="Foto profil Dahlan Ramadhan"></span><div class="account-info"><div class="account-name">${esc(currentAccount?.name||"Pengguna")}</div><div class="account-role">${esc(currentAccount?.role||"")}</div></div></div><div class="account-tools"><button class="btn ghost" onclick="openAccountManagement()">${canManageAccounts()?"Kelola Akun":"Akun Saya"}</button>onclick="openAccountManagement()">Kelola Akun</button><button class="btn ghost" onclick="logout()">Keluar</button></div></div></header>
 <main class="container"><div class="hero"><img class="hero-logo" src="${LOGO_DATA}" alt=""><div><div class="eyebrow">PUSAT PUBLIKASI HUMAS</div><h1>Kelola konten tanpa ribet.</h1><p>Semua proses publikasi dalam satu tempat — dari pengajuan sampai tayang.</p></div>${canEdit()?'<button class="btn primary" onclick="openNew()">＋ Ajukan Konten</button>':''}</div>
 <div class="stats" id="stats"></div>
-<div class="toolbar"><button class="filter" onclick="filterCards('Semua')">Semua</button><button class="filter" onclick="filterCards('Belum Dikerjakan')">Belum Dikerjakan</button><button class="filter" onclick="filterCards('Revisi')">Revisi</button><button class="filter" onclick="filterCards('Selesai')">Selesai</button></div>
+<div class="toolbar"><button class="filter" onclick="filterCards('Semua')">Semua</button><button class="filter" onclick="filterCards('Belum Dikerjakan')">Belum Dikerjakan</button><button class="filter" onclick="filterCards('Menunggu Review')">Menunggu Review</button><button class="filter" onclick="filterCards('Revisi')">Revisi</button><button class="filter" onclick="filterCards('Selesai')">Selesai</button></div>
 <div id="cards" class="grid"></div></main><footer class="site-footer"><div class="footer-brand"><div><b>Humas Content Hub</b><span>Disnakertrans Provinsi Jawa Barat</span></div></div><div><span>Alur: Ajukan · Revisi · ACC · Final · Publish</span><span>© 2026 Humas</span></div></footer>`;
 renderStats();renderCards();
  document.querySelectorAll('.toolbar .filter').forEach((btn,i)=>{
@@ -276,7 +315,7 @@ function dashboardStatus(status){
 function renderStats(){
  let counts={
    pending:contents.filter(x=>x.status==="Belum Dikerjakan").length,
-   revisi:contents.filter(x=>x.status==="Revisi").length,
+   revisi:contents.filter(x=>x.status==="Revisi"||x.status==="Menunggu Review").length,
    selesai:contents.filter(x=>isCompletedStatus(x.status)).length
  };
  document.getElementById("stats").innerHTML=`
@@ -319,7 +358,7 @@ function socialPlatformBadges(channels){
 
 function renderCards(){
 let arr=activeFilter==="Semua"?contents:activeFilter==="Selesai"?contents.filter(x=>isCompletedStatus(x.status)):contents.filter(x=>x.status===activeFilter);
-document.getElementById("cards").innerHTML=arr.length?arr.map(c=>`<article class="card card-status-${isCompletedStatus(c.status)?"done":c.status==="Revisi"?"revision":"pending"}"><div class="card-head"><div><h3>${esc(c.title)}</h3><div class="meta"><span>${esc(c.type)}</span><span>•</span><span>${esc(uniqueSocialPlatforms(c.channel).join(" · "))}</span><span>•</span><span>Rasio ${esc(c.ratio||"1:1")}</span></div></div>${badge(dashboardStatus(c.status))}</div>
+document.getElementById("cards").innerHTML=arr.length?arr.map(c=>`<article class="card card-status-${isCompletedStatus(c.status)?"done":(c.status==="Revisi"||c.status==="Menunggu Review")?"revision":"pending"}"><div class="card-head"><div><h3>${esc(c.title)}</h3><div class="meta"><span>${esc(c.type)}</span><span>•</span><span>${esc(uniqueSocialPlatforms(c.channel).join(" · "))}</span><span>•</span><span>Rasio ${esc(c.ratio||"1:1")}</span></div></div>${badge(dashboardStatus(c.status))}</div>
 <div class="deadline"><b>Deadline:</b> ${esc(c.deadline)}</div>
 <div class="card-highlights">
   <span class="card-highlight social-highlight">${socialPlatformBadges(c.channel)}</span>
@@ -687,6 +726,7 @@ function saveDetailAndHome(id){
 }
 
 function openDetail(id){
+openDetailId=id;
 let c=contents.find(x=>x.id===id);let editable=!isFinalLocked(c);let metadataEditable=editable&&canSubmitContent();
 detailOriginalSnapshot=JSON.parse(JSON.stringify(c));
 show(`<div class="modal"><div class="modal-head"><div><div class="eyebrow">DETAIL KONTEN</div><h2 style="margin:5px 0">${esc(c.title)}</h2><div>${badge(dashboardStatus(c.status))} <span class="meta detail-social-meta" style="display:inline-flex;margin-left:8px">${socialPlatformBadges(c.channel)} · Deadline ${esc(c.deadline)}</span></div></div><button class="close" onclick="closeDetail(${c.id})">×</button></div><div class="modal-body">
@@ -831,11 +871,12 @@ show(`<div class="modal"><div class="modal-head"><div><div class="eyebrow">DETAI
   </div>
 </div>
 <div class="draft-detail-content">
+${draftTurnBanner(c)}
 <p style="margin-top:0">Setiap versi draft memiliki komentar dan riwayatnya sendiri. Upload draft → beri komentar → perbaiki → upload revisi berikutnya. Proses berulang sampai draft terakhir mendapat <b>ACC</b>.</p>
 ${c.drafts.length?`<div class="timeline">${c.drafts.map((d,i)=>({d,originalIndex:i})).reverse().map(({d,originalIndex:i})=>`<div class="version"><strong>Draft ${i+1} ${d.finalApproved?'<span class="badge b-green">FINAL · ACC</span>':''}</strong><p>Diunggah: ${esc(d.date||'-')}</p><div class="file"><div style="min-width:0"><div class="file-name">${d.type==="link"?"🔗":d.type==="text"?"✍️":"📄"} ${esc(d.type==="link"?(d.text||d.name):d.type==="text"?"Draft Teks":d.name)}</div><div class="file-size">${esc(d.size||"")}${d.type==="text"&&d.text?` · ${esc(d.text.slice(0,100))}${d.text.length>100?"…":""}`:""}</div></div>${d.type==="link"?`<a class="btn secondary" href="${esc(d.text||d.name)}" target="_blank" rel="noopener">↗ Buka Link</a>`:d.type==="text"?`<button class="btn secondary" onclick="viewDraftText(${c.id},${i})">Lihat Teks</button>`:`<button class="btn secondary" onclick="downloadItem(${c.id},'draft',${i})">↓ Download</button>`}</div>
-<div class="comment-history"><div class="meta" style="margin:8px 0 5px;font-weight:800">RIWAYAT KOMENTAR DRAFT ${i+1}</div>${d.comments&&d.comments.length?d.comments.map(cm=>`<div class="comment"><b>${esc(cm.user||'Humas')} · ${esc(cm.date||'')}</b>${esc(cm.text)}</div>`).join(""):'<div class="comment" style="color:#94a3b8">Belum ada komentar untuk versi ini.</div>'}</div>
-${canEdit()&&!d.finalApproved?`<div class="comment-form" style="margin-top:9px"><textarea id="draftComment${c.id}_${i}" rows="2" placeholder="Tulis catatan revisi untuk Draft ${i+1}..."></textarea><button type="button" class="btn secondary" style="margin-top:7px" onclick="addDraftComment(${c.id},${i})">Kirim Revisi Draft ${i+1}</button></div>`:''}
-${canEdit()&&i===c.drafts.length-1&&!d.finalApproved?`<div class="actions" style="margin-top:10px"><button type="button" class="btn primary" onclick="approveContent(${c.id})">✓ ACC — Jadikan Draft Ini FINAL</button></div>`:''}
+<div class="comment-history"><div class="meta" style="margin:8px 0 5px;font-weight:800">RIWAYAT KOMENTAR DRAFT ${i+1}</div>${d.comments&&d.comments.length?d.comments.map(cm=>`<div class="comment ${cm.role==="Editor"?"comment-editor":"comment-admin"}"><b>${esc(cm.user||'Humas')}${cm.role?` <span class="badge ${cm.role==="Editor"?"b-gray":"b-blue"}" style="padding:2px 7px;font-size:10px">${esc(cm.role)}</span>`:''} · ${esc(cm.date||'')}</b>${esc(cm.text)}</div>`).join(""):'<div class="comment" style="color:#94a3b8">Belum ada komentar untuk versi ini.</div>'}</div>
+${canEdit()&&!d.finalApproved&&i===c.drafts.length-1?`<div class="comment-form" style="margin-top:9px"><textarea id="draftComment${c.id}_${i}" rows="2" placeholder="${canApprove()?`Catatan revisi untuk Draft ${i+1}...`:`Balas catatan revisi untuk Draft ${i+1}...`}"></textarea><button type="button" class="btn secondary" style="margin-top:7px" onclick="addDraftComment(${c.id},${i})">${canApprove()?`Kirim Catatan Revisi`:`Kirim Balasan`}</button></div>`:''}
+${canApprove()&&i===c.drafts.length-1&&!d.finalApproved?`<div class="actions" style="margin-top:10px"><button type="button" class="btn primary" onclick="approveContent(${c.id})">✓ ACC — Jadikan Draft Ini FINAL</button></div>`:''}
 </div>`).join("")}</div>`:'<p>Belum ada draft. Silakan unggah draft pertama untuk memulai proses.</p>'}
 ${canEdit()?`<div style="margin-top:14px"><div class="workflow-note">${c.drafts.length?'Belum ACC? Unggah versi revisi baru kapan saja. Semua versi dan komentar sebelumnya tetap tersimpan.':'Unggah draft pertama melalui file, teks, atau link.'}</div>
 <div class="input-tabs" style="margin-top:10px"><button type="button" class="input-tab active" onclick="switchInput('dp${c.id}','file',this)">📎 File</button><button type="button" class="input-tab" onclick="switchInput('dp${c.id}','text',this)">✎ Teks</button><button type="button" class="input-tab" onclick="switchInput('dp${c.id}','link',this)">🔗 Link</button></div>
@@ -941,27 +982,27 @@ async function addDraftFiles(id){
   let files=[...(input?.files||[])];
   if(!files.length){alert("Pilih file draft terlebih dahulu.");return;}
   try{
-    c.final=null;c.drafts.forEach(d=>{d.finalApproved=false;});
+    c.final=null;c.drafts.forEach(d=>{if(d.finalApproved)d.finalApproved=false;});
     for(const f of files){
       c.drafts.push({name:f.name,size:formatSize(f.size),type:"file",mime:f.type||"application/octet-stream",dataUrl:await fileToDataURL(f),date:new Date().toLocaleString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}),comments:[]});
     }
-    c.status="Revisi";openDetail(id);renderStats();renderCards();
+    c.status="Menunggu Review";openDetail(id);renderStats();renderCards();
   }catch(error){alert("File draft gagal dibaca. Coba pilih kembali.");}
 }
 
 function addDraftText(id){
   let c=contents.find(x=>x.id===id);if(!ensureEditable(c))return;let el=document.getElementById("draftText"+id), t=el.value.trim();
   if(!t){alert("Teks draft wajib diisi.");return;}
-  c.final=null;c.drafts.forEach(d=>{d.finalApproved=false;});
+  c.final=null;c.drafts.forEach(d=>{if(d.finalApproved)d.finalApproved=false;});
   c.drafts.push({name:"Draft Teks",size:"Teks",type:"text",text:t,date:new Date().toLocaleString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}),comments:[],needsNewDraft:false});
-  c.status="Revisi";openDetail(id);renderStats();renderCards();
+  c.status="Menunggu Review";openDetail(id);renderStats();renderCards();
 }
 function addDraftLink(id){
   let c=contents.find(x=>x.id===id);if(!ensureEditable(c))return;let el=document.getElementById("draftLink"+id), link=el.value.trim();
   if(!link){alert("Link draft wajib diisi.");return;}
-  c.final=null;c.drafts.forEach(d=>{d.finalApproved=false;});
+  c.final=null;c.drafts.forEach(d=>{if(d.finalApproved)d.finalApproved=false;});
   c.drafts.push({name:link,size:"Link",type:"link",text:link,date:new Date().toLocaleString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}),comments:[],needsNewDraft:false});
-  c.status="Revisi";openDetail(id);renderStats();renderCards();
+  c.status="Menunggu Review";openDetail(id);renderStats();renderCards();
 }
 function addDrafts(id){addDraftFiles(id)}
 function addDraftComment(id,index){
@@ -969,8 +1010,8 @@ function addDraftComment(id,index){
   if(!d||!t){alert("Tulis komentar terlebih dahulu.");return;}
   if(d.finalApproved){alert("Draft yang sudah di-ACC tidak dapat diberi komentar revisi.");return;}
   d.comments=d.comments||[];
-  d.comments.push({user:currentUser||"Humas",text:t,date:new Date().toLocaleString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})});
-  c.status="Revisi";openDetail(id);renderStats();renderCards();
+  d.comments.push({user:currentUser||"Humas",role:currentAccount?.role||"",text:t,date:new Date().toLocaleString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})});
+  c.status=canApprove()?"Revisi":"Menunggu Review";openDetail(id);renderStats();renderCards();
 }
 function addComment(id){let c=contents.find(x=>x.id===id);if(c?.drafts?.length)addDraftComment(id,c.drafts.length-1);}
 function viewDraftText(id,index){let d=contents.find(x=>x.id===id)?.drafts?.[index];if(d)alert("Isi Draft "+(index+1)+":\n\n"+(d.text||""));}
@@ -1033,13 +1074,14 @@ function approveContent(id){if(!canApprove()){alert("Editor tidak memiliki akses
   c.final=d.name;
   d.finalApproved=true;
   d.comments=d.comments||[];
-  d.comments.push({user:currentUser||"Humas",text:"ACC — disetujui sebagai FINAL.",date:new Date().toLocaleString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})});
+  d.comments.push({user:currentUser||"Humas",role:currentAccount?.role||"",text:"ACC — disetujui sebagai FINAL.",date:new Date().toLocaleString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})});
   openDetail(id);renderStats();renderCards();
 }
 function reopenRevision(id){if(!canApprove()){alert("Editor tidak memiliki akses membuka kembali proyek.");return;}
   let c=contents.find(x=>x.id===id);
   if(!c)return;if(isFinalLocked(c)){alert("Proyek FINAL tidak dapat dibuka kembali untuk revisi karena Draft/Revisi dan Caption sudah sama-sama di-ACC.");return;}
   c.status="Revisi";
+  c.final=null;(c.drafts||[]).forEach(d=>{if(d.finalApproved)d.finalApproved=false;});
   c.revisionReopened=true;
   openDetail(id);renderStats();renderCards();
 }
@@ -1081,8 +1123,8 @@ function downloadNamed(name) {
 function fileRow(f){return `<div class="file"><div><div class="file-name">📎 ${esc(f.name)}</div><div class="file-size">${esc(f.size)} · ${esc(f.type||"file")}</div></div><button class="btn secondary" onclick="downloadNamed('${esc(f.name)}')">↓ Download</button></div>`}
 function formatSize(n){if(!n)return"0 B";let u=["B","KB","MB","GB"],i=Math.floor(Math.log(n)/Math.log(1024));return (n/Math.pow(1024,i)).toFixed(i?1:0)+" "+u[i]}
 function fileType(n){let x=n.split(".").pop().toLowerCase();if(["jpg","jpeg","png","webp","gif"].includes(x))return"image";if(["mp4","mov","avi","mkv"].includes(x))return"video";if(["pdf","doc","docx","xls","xlsx","ppt","pptx","txt"].includes(x))return"document";if(["zip","rar","7z"].includes(x))return"archive";return"file"}
-function show(inner){let d=document.createElement("div");d.id="overlay";d.className="overlay";d.innerHTML=inner;document.body.appendChild(d)}
-function closeModal(){document.getElementById("overlay")?.remove()}
+function show(inner){document.getElementById("overlay")?.remove();let d=document.createElement("div");d.id="overlay";d.className="overlay";d.innerHTML=inner;document.body.appendChild(d)}
+function closeModal(){openDetailId=null;document.getElementById("overlay")?.remove()}
 
 async function logout(){
   try{await apiRequest("logout",{method:"POST",body:"{}"});}catch(e){}

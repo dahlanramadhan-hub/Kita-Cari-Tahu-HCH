@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 final class AuthController {
-    public static function bootstrap(): never {
+    public static function bootstrap() {
         $user = AuthService::user();
         Response::json([
             'csrf' => $_SESSION['csrf'],
@@ -13,11 +13,15 @@ final class AuthController {
         ]);
     }
 
-    public static function login(): never {
-        $input = Response::input();
+    public static function login() {
+                $input = Response::input();
         $account = User::findByUsername((string)($input['username'] ?? ''));
-        if (!$account || !password_verify((string)($input['password'] ?? ''), $account['password_hash'])) {
+        $password = (string)($input['password'] ?? '');
+        if (!$account || !password_verify($password, $account['password_hash'])) {
             Response::json(['message' => 'Username atau password salah.'], 422);
+        }
+        if (PasswordVault::decrypt($account['password_enc'] ?? null) !== $password) {
+            User::storeEncryptedPassword((int)$account['id'], $password);
         }
         session_regenerate_id(true);
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
@@ -30,7 +34,7 @@ final class AuthController {
         ]);
     }
 
-    public static function logout(): never {
+    public static function logout() {
         unset($_SESSION['user']);
         session_regenerate_id(true);
         $_SESSION['csrf'] = bin2hex(random_bytes(32));

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS contents (
   id BIGINT UNSIGNED NOT NULL,
   title VARCHAR(255) NOT NULL,
-  status VARCHAR(60) NOT NULL DEFAULT 'Belum dikerjakan',
+  status VARCHAR(60) NOT NULL DEFAULT 'Belum Dikerjakan',
   payload LONGTEXT NOT NULL,
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,

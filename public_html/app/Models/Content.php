@@ -5,7 +5,7 @@ final class Content {
     public static function all(): array {
         $rows = db()->query('SELECT payload FROM contents ORDER BY created_at DESC, id DESC')->fetchAll();
         return array_values(array_filter(array_map(
-            static fn(array $row) => json_decode($row['payload'], true),
+            static function ($row) { return json_decode($row['payload'], true); },
             $rows
         ), 'is_array'));
     }

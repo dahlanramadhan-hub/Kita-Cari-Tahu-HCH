@@ -4,7 +4,8 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/app/bootstrap.php';
 
 try {
-    // The SQL schema is installed through database/schema.sql in phpMyAdmin.
+    // Tabel dibuat lewat database/schema.sql (phpMyAdmin); kolom baru ditambah otomatis.
+    User::ensureSchema();
     User::seedDefaults();
 
     $route = trim((string)($_GET['route'] ?? ''), '/');
@@ -12,15 +13,11 @@ try {
 
     if ($method !== 'GET') AuthService::checkCsrf();
 
-    if (
-    ($route === '' || $route === 'bootstrap')
-    && $method === 'GET'
-) {
-    AuthController::bootstrap();
-}
+    if (($route === '' || $route === 'bootstrap') && $method === 'GET') AuthController::bootstrap();
     if ($route === 'login' && $method === 'POST') AuthController::login();
     if ($route === 'logout' && $method === 'POST') AuthController::logout();
     if ($route === 'accounts' && $method === 'POST') AccountController::save();
+    if ($route === 'password' && $method === 'GET') AccountController::password();
     if ($route === 'profile' && $method === 'POST') ProfileController::save();
     if ($route === 'contents' && $method === 'POST') ContentController::save();
     if ($route === 'file' && $method === 'GET') FileController::show();

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 final class Response {
-    public static function json(array $data, int $status = 200): never {
+    public static function json(array $data, int $status = 200) {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
@@ -17,7 +17,7 @@ final class Response {
         return $data;
     }
 
-    public static function fail(Throwable $e): never {
+    public static function fail(Throwable $e) {
         error_log((string)$e);
         $message = APP_DEBUG ? $e->getMessage() : 'Terjadi kesalahan pada server. Periksa konfigurasi atau log aplikasi.';
         self::json(['message' => $message], 500);

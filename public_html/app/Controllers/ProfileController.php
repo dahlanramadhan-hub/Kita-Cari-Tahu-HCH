@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 final class ProfileController {
-    public static function save(): never {
+    public static function save() {
         $actor = AuthService::requireUser();
         $input = Response::input();
         $name = trim((string)($input['name'] ?? ''));
